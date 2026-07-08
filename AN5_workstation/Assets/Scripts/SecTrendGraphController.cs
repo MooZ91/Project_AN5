@@ -112,6 +112,6 @@ public class SecTrendGraphController : MonoBehaviour
         if (setpointLine != null) setpointLine.SetNormalizedPoints(normSetpoint);
 
         if (errorLabel != null)
-            errorLabel.text = $"Δ {Mathf.Abs(actualNow - setpointNow):F1}mm";
+            errorLabel.text = $"Δ {Mathf.Abs(actualNow - setpointNow):F4}mm";
     }
 }

@@ -183,10 +183,14 @@ public class ControlArticular : MonoBehaviour
         jointSliders[2].minValue = -152f;
         jointSliders[2].maxValue = 152f;
         jointSliders[3].minValue = -233f;
-        jointSliders[3].maxValue = 89f;
+        // J4 mechanical limit is +85 deg (URDF / mock_cmd_server.py JOINT_LIMITS);
+        // 89 exceeded it, so commands near the top of that range could be rejected
+        // downstream. Capped 2 deg below the real limit as a safety margin.
+        jointSliders[3].maxValue = 83f;
         jointSliders[4].minValue = -160f;
         jointSliders[4].maxValue = 160f;
-        jointSliders[5].minValue = -179f;
+        // J6 mechanical limit is -175 deg; -179 exceeded it. Same 2 deg margin.
+        jointSliders[5].minValue = -173f;
         jointSliders[5].maxValue = 90f;
     }
 
