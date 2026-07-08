@@ -1,0 +1,8 @@
+# Local Claude Code config (machine-specific, not versioned)
+.claude/
+AN5_workstation/.claude/
+ros2_ws/.claude/
+
+# Local backup of the original standalone repos' git history, kept only for
+# reference during the AN5_workstation + ros2_ws -> Project_AN5 unification.
+.archived-git-history/

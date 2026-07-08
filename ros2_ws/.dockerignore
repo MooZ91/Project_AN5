@@ -1,0 +1,13 @@
+build/
+install/
+log/
+.git/
+.claude/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Mallas 3D (~387MB): no se usan en runtime por an5_mock_sim (los valores
+# del URDF ya estan hardcodeados en mock_cmd_server.py); solo hacen falta
+# si algun dia se corre RViz con frcobot_description dentro del contenedor.
+src/code/code/frcobot_description/meshes/

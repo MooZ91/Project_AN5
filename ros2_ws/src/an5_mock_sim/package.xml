@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>an5_mock_sim</name>
+  <version>0.0.1</version>
+  <description>
+    Modo simulacion (mock) del robot AN5/FR5: reemplaza el driver real
+    (fr_ros2/ros2_cmd_server) exponiendo la misma interfaz ROS2
+    (/FR_ROS_API_service, nonrt_state_data) y agrega /joint_states para
+    RViz/Unity, sin tocar ningun paquete del stack real.
+  </description>
+  <maintainer email="mattoc91@gmail.com">martin</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>frhal_msgs</depend>
+
+  <exec_depend>fr_ros2</exec_depend>
+  <exec_depend>code</exec_depend>
+  <exec_depend>rosbridge_server</exec_depend>
+  <exec_depend>ros2launch</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

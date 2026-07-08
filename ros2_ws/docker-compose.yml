@@ -1,0 +1,10 @@
+services:
+  an5_mock_sim:
+    build: .
+    image: an5_mock_sim:latest
+    ports:
+      - "9090:9090"
+    # Para pasar argumentos del launch (ver tabla de parametros en
+    # src/an5_mock_sim/README.md), sobreescribir el comando, ej:
+    #   command: ["ros2", "launch", "an5_mock_sim", "sim.launch.py", "easing:=linear"]
+    command: ["ros2", "launch", "an5_mock_sim", "sim.launch.py"]
