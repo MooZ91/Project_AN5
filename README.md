@@ -8,6 +8,7 @@ dos componentes que antes vivían en repos separados:
 |---|---|---|
 | [`AN5_workstation/`](AN5_workstation/) | Interfaz de operador en Unity: control articular/cartesiano, grabación y reproducción de trayectorias, visualización 3D del URDF en tiempo real. | [`AN5_workstation/README.md`](AN5_workstation/README.md) |
 | [`ros2_ws/`](ros2_ws/) | Workspace ROS 2 del robot, con modo real (driver Fairino) y modo **mock** (simulación sin brazo físico) para desarrollar contra Unity sin hardware. | [`ros2_ws/README.md`](ros2_ws/README.md), detalle del mock en [`ros2_ws/src/an5_mock_sim/README.md`](ros2_ws/src/an5_mock_sim/README.md) |
+| [`AN5_Matlab/`](AN5_Matlab/) | Scripts MATLAB/Simulink del robot: cinemática directa/inversa (`fr5_fk.m`, `fr5_ik.m`, `inverse_kinematics.m`), generación de trayectorias (`Trayectoria_*.m`), interfaces App Designer (`Interfaz_*.mlapp`) y los assets URDF/mallas de `frcobot_description`. | — (sin README propio) |
 
 Antes eran los repos `Interfaz-Unity-AN5` y `ros2_ws` en GitHub; este repo unificado
 arrancó con un commit inicial "de cero" (sin arrastrar ese historial) para que ambos
@@ -60,7 +61,7 @@ flowchart TB
     Unity <-->|"WebSocket JSON · puerto 9090"| Bridge["rosbridge_websocket"]
     Bridge <-->|traduce hacia/desde| Graph["Grafo ROS 2 (DDS)"]
 
-    Graph <-->|"input_cartesian_position → output_joint_position"| Matlab["MATLAB\nmatlab_ik_node (inverse_kinematics.m)\n· proceso externo, fuera de este repo\n· requiere correr en el mismo equipo/red ROS 2"]
+    Graph <-->|"input_cartesian_position → output_joint_position"| Matlab["MATLAB\nmatlab_ik_node (AN5_Matlab/inverse_kinematics.m)\n· proceso aparte, se levanta a mano\n· requiere correr en el mismo equipo/red ROS 2"]
     Graph <-->|"api_command ← / → current_joint_position,\ncurrent_cartesian_position, setpoint_cartesian_position,\n/joint_states, nonrt_state_data"| Mock["ros2_ws: an5_mock_sim\nmock_cmd_server.py (nodo ROS 2 nativo)"]
     Graph -.->|"api_command → /FR_ROS_API_service\n(bloqueado en modo sim: XML-RPC inalcanzable)"| Real["ros2_ws: code\npublisher_subscriber.py → robot real"]
 ```
@@ -100,14 +101,20 @@ Puntos clave:
 - No requiere el robot físico para el modo simulado (`sim.launch.py`); el modo real
   (`real.launch.py`) sí necesita el controlador FR5/AN5 accesible en la red.
 
-### MATLAB (externo, no versionado en este repo)
-- `matlab_ik_node` (`inverse_kinematics.m`) resuelve la cinemática inversa. No hay
-  archivos `.m` en este repo: es un proceso aparte que se conecta al mismo grafo ROS 2.
+### MATLAB (`AN5_Matlab/`)
+- MATLAB (probado con R2023b+) y Simulink para abrir `simulador_trayectorias_AN5.slx`
+  y las interfaces App Designer (`Interfaz_Matlab.mlapp`, `Interfaz_Matlab_Simulacion.mlapp`).
+- `matlab_ik_node` (`inverse_kinematics.m`) resuelve la cinemática inversa y corre como
+  proceso aparte que se conecta al mismo grafo ROS 2 — no es un paquete ROS 2, hay que
+  levantarlo a mano desde MATLAB.
 - Tiene que correr en el mismo equipo (o red/dominio ROS 2) que `ros2_ws`. Trae reglas
   de seguridad propias (caja de posición segura, banda de orientación prohibida en Rx
   y restricción J4/J5) heredadas de otra celda de robot — pueden rechazar poses
   legítimas de este proyecto; ver la nota en
   [`ros2_ws/src/an5_mock_sim/README.md`](ros2_ws/src/an5_mock_sim/README.md).
+- Incluye su propia copia de `frcobot_description` (URDF + mallas) para visualizar el
+  robot en MATLAB/Simulink; son los mismos modelos que usa Unity, versionados acá vía
+  Git LFS (ver más abajo).
 
 ### Git LFS
 Este repo usa **Git LFS** para modelos 3D, texturas, audio/video y otros binarios
