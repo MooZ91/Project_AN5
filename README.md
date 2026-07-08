@@ -122,7 +122,11 @@ git clone git@github.com:MooZ91/Project_AN5.git
 
 Si ya clonaste sin tener `git-lfs` instalado, los archivos grandes van a aparecer
 como punteros de texto en vez de contenido real — corré `git lfs install && git lfs pull`
-para traerlos.
+para traerlos. Esto es lo que suele romper Unity al portar el proyecto a otra máquina:
+si los meshes/texturas quedan como punteros, el importer tira una catarata de errores
+inconexos en la consola. `AN5_workstation/` trae un chequeo automático para esto (ver
+[`AN5_workstation/README.md`](AN5_workstation/README.md#git-lfs)): al abrir el proyecto
+detecta punteros sin traer y ofrece correr `git lfs pull` por vos.
 
 ## Puesta en marcha rápida
 

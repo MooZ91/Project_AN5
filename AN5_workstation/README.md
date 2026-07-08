@@ -78,6 +78,30 @@ No extra dependencies beyond Unity. The trajectory file picker uses the built-in
 
 No extra dependencies. The file picker uses `osascript`.
 
+### Git LFS
+
+Meshes, textures, and other large binaries in this project are tracked with **Git
+LFS** (see `.gitattributes` at the repo root and here). Install it **before**
+cloning, otherwise those assets download as small text pointer files instead of
+real content — Unity will then fail to import them and flood the Console with
+unrelated-looking errors (this is exactly what happened porting this project to a
+new machine without `git-lfs` set up):
+
+```bash
+sudo apt install git-lfs   # or your OS's installer
+git lfs install
+git clone git@github.com:MooZ91/Project_AN5.git
+```
+
+Already cloned without it? Run `git lfs install && git lfs pull` from the repo root
+to fetch the real files.
+
+As a safety net, `Assets/Editor/GitLfsCheck.cs` runs automatically the first time
+the project is opened in this Editor session: it scans for LFS-tracked files that
+are still pointer text, warns in the Console, and offers to run `git lfs pull` for
+you. Re-run it manually anytime via **Tools > Git LFS > Check for missing LFS
+files**.
+
 ## Getting started
 
 1. Clone the repository and open it in Unity.
