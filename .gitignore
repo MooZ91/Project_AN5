@@ -6,3 +6,8 @@ ros2_ws/.claude/
 # Local backup of the original standalone repos' git history, kept only for
 # reference during the AN5_workstation + ros2_ws -> Project_AN5 unification.
 .archived-git-history/
+
+# MATLAB/Simulink build cache and logs (regenerated locally)
+AN5_Matlab/slprj/
+AN5_Matlab/*.slxc
+AN5_Matlab/Exceptions.log
