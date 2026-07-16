@@ -3,7 +3,9 @@ using UnityEngine.UI;
 
 /// Attach to Panel_trayectorias.
 /// Populates the SecJoints sliders (and, via SecJointsSliderSync, their value
-/// inputs) with the robot's current joint positions whenever this tab is shown.
+/// inputs) with the robot's current joint positions whenever this tab is shown,
+/// and -- like MonitoreoActivation -- drives the fr5v6 model from ROS while this
+/// panel is visible, so drag-teach moves are reflected in the 3D model here too.
 public class TrayectoriasActivation : MonoBehaviour
 {
     static readonly string[] JointNames =
@@ -44,5 +46,13 @@ public class TrayectoriasActivation : MonoBehaviour
             // further live ROS position updates for the whole session.
             slider.SetValueWithoutNotify(positions[i]);
         }
+
+        _jps.driveRobotModel = true;
+        _jps.ApplyToModel();   // snap fr5v6 to current pose immediately
+    }
+
+    void OnDisable()
+    {
+        if (_jps != null) _jps.driveRobotModel = false;
     }
 }

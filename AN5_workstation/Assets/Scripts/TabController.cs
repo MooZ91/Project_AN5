@@ -36,6 +36,16 @@ public class TabController : MonoBehaviour
 
     void SetTab(int index)
     {
+        // Disable every outgoing panel before enabling the incoming one. Panels like
+        // MonitoreoActivation/TrayectoriasActivation toggle shared state (driveRobotModel)
+        // from OnEnable/OnDisable; doing all the disables first guarantees the incoming
+        // panel's OnEnable always runs last and wins, regardless of which tab was active
+        // before. Enabling the new panel first (old code) let the outgoing panel's
+        // OnDisable fire afterward and clobber what OnEnable had just set.
+        if (index != 0) panelPpal?.SetActive(false);
+        if (index != 1) panelTrayectorias?.SetActive(false);
+        if (index != 2) panelMonitoreo?.SetActive(false);
+
         panelPpal?.SetActive(index == 0);
         panelTrayectorias?.SetActive(index == 1);
         panelMonitoreo?.SetActive(index == 2);

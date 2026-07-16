@@ -30,6 +30,14 @@ public class SecTrajController : MonoBehaviour
     [Header("IK request (ROS/MATLAB, see ResolveJointTrajectory)")]
     public float ikTimeoutSeconds = 5f;
 
+    [Tooltip("Timeout used only for the one cold-start retry in ResolveJointTrajectory. " +
+             "matlab_ik_node's very first fr5_ik() call in a fresh MATLAB session measured " +
+             "~13s in practice (vs. low-milliseconds for every call after it) -- a one-time " +
+             "JIT/parse cost, not the algorithm itself. ikTimeoutSeconds alone (5s) isn't " +
+             "enough to survive that, so the retry gets this much larger budget instead of " +
+             "reusing ikTimeoutSeconds.")]
+    public float ikColdStartRetryTimeoutSeconds = 25f;
+
     [Header("Arrival mode")]
     [Tooltip("When true, sends MoveJ per point and waits for current_joint_position to confirm arrival before " +
              "the next one (needs live, responsive feedback) — slower, but fully confirmed point-by-point. " +
@@ -41,6 +49,9 @@ public class SecTrajController : MonoBehaviour
              "depend on the real robot controller's own onboard GetInverseKin, which has been failing on real " +
              "hardware, so cartesian commands are never sent directly to the robot.")]
     public bool waitForCartesianArrival = true;
+
+    [Header("Loading overlay — shown while ResolveJointTrajectory waits on ROS/MATLAB")]
+    public LoadingOverlayController loadingOverlay;
 
     [Header("UI — auto-resolved from hierarchy if null")]
     public Button    cargarButton;
@@ -119,6 +130,8 @@ public class SecTrajController : MonoBehaviour
             cartesianPositionSubscriber = FindObjectOfType<CartesianPositionSubscriber>();
         if (ikSubscriber == null)
             ikSubscriber = FindObjectOfType<InverseKinematicsSubscriber>();
+        if (loadingOverlay == null)
+            loadingOverlay = FindObjectOfType<LoadingOverlayController>();
         if (ikSubscriber != null && !_ikSubscribed)
         {
             ikSubscriber.OnInverseKinematicsResultReceived += OnIkResultReceivedFromNetworkThread;
@@ -216,7 +229,15 @@ public class SecTrajController : MonoBehaviour
 
         if (_points.Count > 0)
         {
+            // ResolveJointTrajectory can take several seconds (each point is a round-trip
+            // to the ROS/MATLAB IK node, see that method's comment) -- block the rest of
+            // the UI behind a modal overlay for that stretch so the user can't press
+            // another button mid-load and think the app is frozen. Hide() runs no matter
+            // how the coroutine below finished (success, rejected point, or timeout).
+            loadingOverlay?.Show();
             yield return StartCoroutine(ResolveJointTrajectory());
+            loadingOverlay?.Hide();
+
             if (!_resolveSucceeded)
             {
                 // All-or-nothing, mirroring the MATLAB file validator: a file with any
@@ -254,12 +275,39 @@ public class SecTrajController : MonoBehaviour
         {
             float[] c = _points[i].cart;
             string cartesianCommand = $"{c[0]},{c[1]},{c[2]},{c[3]},{c[4]},{c[5]}";
-            ros2CommandSender.SendCommandToTopic(ros2CommandSender.inverseInputTopic, cartesianCommand);
-            Debug.Log($"[SecTrajController] Solicitando IK (ROS) para punto {i + 1}/{_points.Count}: {cartesianCommand}");
 
             float[] resultDeg = null;
             string errorReason = null;
-            yield return StartCoroutine(WaitForIkResult(a => resultDeg = a, e => errorReason = e));
+
+            // One retry, timeout-only: matlab_ik_node's first fr5_ik() call in a fresh
+            // MATLAB session runs noticeably slower than every call after it (one-time
+            // JIT/parse cost, not the algorithm itself) -- observed in practice taking
+            // longer than ikTimeoutSeconds (5s default), which made the FIRST file
+            // loaded after starting/restarting the MATLAB node always get its point 1
+            // rejected and the whole load cancelled (all-or-nothing), even though a
+            // second attempt (now warmed up) resolved every point fine. Retrying once
+            // absorbs that one-time cost transparently. Not retried for NaN/unreachable
+            // or malformed-response errors: those are about the pose itself, so MATLAB
+            // would just return the same rejection again.
+            for (int attempt = 1; attempt <= 2; attempt++)
+            {
+                ros2CommandSender.SendCommandToTopic(ros2CommandSender.inverseInputTopic, cartesianCommand);
+                Debug.Log($"[SecTrajController] Solicitando IK (ROS) para punto {i + 1}/{_points.Count}" +
+                          (attempt > 1 ? $" (reintento {attempt})" : "") + $": {cartesianCommand}");
+
+                resultDeg = null;
+                errorReason = null;
+                float attemptTimeout = attempt == 1 ? ikTimeoutSeconds : ikColdStartRetryTimeoutSeconds;
+                yield return StartCoroutine(WaitForIkResult(a => resultDeg = a, e => errorReason = e, attemptTimeout));
+
+                bool isTimeout = errorReason != null && errorReason.StartsWith("timeout");
+                if (errorReason == null || !isTimeout || attempt == 2)
+                    break;
+
+                Debug.LogWarning($"[SecTrajController] Punto {i + 1}/{_points.Count}: {errorReason}. " +
+                                  $"Reintentando una vez con timeout extendido ({ikColdStartRetryTimeoutSeconds}s, " +
+                                  "posible arranque en frío del nodo ROS/MATLAB)...");
+            }
 
             if (errorReason != null)
             {
@@ -283,7 +331,7 @@ public class SecTrajController : MonoBehaviour
     // (its isempty()-based check doesn't catch a NaN(1,6) array) -- checked for
     // explicitly here since a NaN slipping through and being sent as a JNTPoint
     // command would be a lot worse than treating it as this point's failure.
-    private IEnumerator WaitForIkResult(System.Action<float[]> onSuccess, System.Action<string> onError)
+    private IEnumerator WaitForIkResult(System.Action<float[]> onSuccess, System.Action<string> onError, float timeoutSeconds)
     {
         lock (_ikPendingLock) { _ikHasPendingData = false; }
         float start = Time.time;
@@ -333,7 +381,7 @@ public class SecTrajController : MonoBehaviour
                 yield break;
             }
 
-            if (Time.time - start > ikTimeoutSeconds)
+            if (Time.time - start > timeoutSeconds)
             {
                 onError("timeout esperando respuesta de IK (¿está corriendo el nodo ROS/MATLAB?)");
                 yield break;
@@ -636,7 +684,7 @@ public class SecTrajController : MonoBehaviour
                     ros2CommandSender.SendCommand(moveCommand);
                     Debug.Log($"[SecTrajController] ({i + 1}/{_points.Count}) {moveCommand}");
 
-                    yield return StartCoroutine(WaitForRobotToReachJointPosition(_jointPoints[i], jointToleranceDeg));
+                    yield return StartCoroutine(WaitForRobotToReachJointPosition(_jointPoints[i], jointToleranceDeg, i + 1, _points.Count));
 
                     float pointDelay = _points[i].delay;
                     if (pointDelay > 0f)
@@ -733,10 +781,18 @@ public class SecTrajController : MonoBehaviour
         Debug.Log("[SecTrajController] Execution complete.");
     }
 
-    private IEnumerator WaitForRobotToReachJointPosition(float[] targetJointDeg, float toleranceDeg)
+    // pointIndex1Based/totalPoints are for diagnostics only (which waypoint this was,
+    // out of how many) -- see the LogWarning below. Investigating a bug where long
+    // files (>10 points) would stop advancing on real hardware with zero console
+    // output: this method used to return silently on timeout, indistinguishable from
+    // a genuine arrival, which is exactly what made that stall look like "the whole
+    // thing just stopped" instead of "still going, just never confirming arrival."
+    private IEnumerator WaitForRobotToReachJointPosition(float[] targetJointDeg, float toleranceDeg,
+                                                          int pointIndex1Based, int totalPoints)
     {
         float timeout = 30f;
         float elapsedTime = 0f;
+        float[] lastSeenJoint = null;
 
         while (elapsedTime < timeout)
         {
@@ -747,6 +803,7 @@ public class SecTrajController : MonoBehaviour
                 elapsedTime += 0.1f;
                 continue;
             }
+            lastSeenJoint = currentJoint;
 
             bool positionReached = true;
             for (int i = 0; i < targetJointDeg.Length; i++)
@@ -764,6 +821,14 @@ public class SecTrajController : MonoBehaviour
             yield return new WaitForSeconds(0.1f);
             elapsedTime += 0.1f;
         }
+
+        string targetStr = string.Join(",", targetJointDeg);
+        string lastSeenStr = lastSeenJoint != null
+            ? string.Join(",", lastSeenJoint)
+            : "sin datos válidos de current_joint_position durante toda la espera";
+        Debug.LogWarning($"[SecTrajController] Timeout ({timeout}s) esperando llegada al punto {pointIndex1Based}/{totalPoints}. " +
+                          $"Target(deg)=[{targetStr}] Último current_joint_position visto=[{lastSeenStr}]. " +
+                          "Se continúa con el siguiente comando de todos modos (no se confirmó la llegada).");
     }
 
     private void SetProgress(float t)

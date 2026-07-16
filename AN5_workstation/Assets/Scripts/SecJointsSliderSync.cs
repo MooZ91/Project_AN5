@@ -17,6 +17,9 @@ public class SecJointsSliderSync : MonoBehaviour
         "J4ValInput", "J5ValInput", "J6ValInput"
     };
 
+    [Tooltip("Degrees added/removed per click of a joint's +/- button.")]
+    public float step = 1f;
+
     void Start()
     {
         var body = transform.Find("Body");
@@ -31,6 +34,23 @@ public class SecJointsSliderSync : MonoBehaviour
             var input  = joint.Find("Val/" + InputNames[i])?.GetComponent<InputField>();
 
             if (slider == null || input == null) continue;
+
+            // Wire +/- buttons
+            var minusBtn = joint.Find("BtnRow/M")?.GetComponent<Button>();
+            var plusBtn  = joint.Find("BtnRow/P")?.GetComponent<Button>();
+            var capturedSliderForBtns = slider;
+            if (minusBtn != null)
+            {
+                minusBtn.onClick.RemoveAllListeners();
+                minusBtn.onClick.AddListener(() =>
+                    capturedSliderForBtns.value = Mathf.Max(capturedSliderForBtns.minValue, capturedSliderForBtns.value - step));
+            }
+            if (plusBtn != null)
+            {
+                plusBtn.onClick.RemoveAllListeners();
+                plusBtn.onClick.AddListener(() =>
+                    capturedSliderForBtns.value = Mathf.Min(capturedSliderForBtns.maxValue, capturedSliderForBtns.value + step));
+            }
 
             // Seed the display with the current slider value
             input.text = slider.value.ToString("F1", CultureInfo.InvariantCulture);
