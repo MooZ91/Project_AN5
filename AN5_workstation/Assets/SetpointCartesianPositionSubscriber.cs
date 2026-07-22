@@ -14,6 +14,7 @@ using RosString = RosSharp.RosBridgeClient.MessageTypes.Std.String;
 public class SetpointCartesianPositionSubscriber : UnitySubscriber<RosString>
 {
     private float[] lastSetpoint = new float[6];
+    private bool _hasReceivedSetpoint;
 
     private RosConnector rosConnectorRef;
     private RosSocket lastSeenSocket;
@@ -68,10 +69,19 @@ public class SetpointCartesianPositionSubscriber : UnitySubscriber<RosString>
             positions[i] = val;
         }
         lastSetpoint = positions;
+        _hasReceivedSetpoint = true;
     }
 
     public float[] GetLastKnownSetpoint()
     {
         return (float[])lastSetpoint.Clone();
     }
+
+    // Distinguishes "never received a message" (lastSetpoint still its float[6]
+    // zero default) from a legitimately-published all-zero setpoint -- needed
+    // because the real robot's fr_ros2 driver never publishes this topic at all
+    // (only an5_mock_sim does), so on real hardware this stays false forever and
+    // callers (SecTrendGraphController) know to fall back to something else
+    // instead of graphing a permanently-frozen zero as if it were real data.
+    public bool HasReceivedSetpoint => _hasReceivedSetpoint;
 }

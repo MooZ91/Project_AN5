@@ -75,6 +75,24 @@ public class SecTrajController : MonoBehaviour
     private bool _ikSubscribed;
     private bool _resolveSucceeded;
 
+    // The cartesian point currently being driven toward, or null while idle. Static
+    // because the real robot's fr_ros2 driver never publishes /setpoint_cartesian_position
+    // (only an5_mock_sim does -- see SetpointCartesianPositionSubscriber.HasReceivedSetpoint),
+    // so on real hardware SecTrendGraphController had no setpoint feed at all and its
+    // setpoint trace sat frozen at zero forever. This component already resolves and
+    // sends each waypoint's cartesian target one at a time, so it's the natural source
+    // of truth to publish it from directly instead, without touching the vendor driver.
+    // A plain static (rather than an instance the graph controller holds a reference to)
+    // sidesteps the scene's multiple duplicate "SecTraj" GameObjects (only one of which
+    // ever actually gets its buttons wired and runs ExecutePoints; the others' EnsureWired()
+    // never resolves, so they never touch this field).
+    private static float[] s_liveCartesianSetpoint;
+
+    public static float[] GetLiveCartesianSetpoint()
+    {
+        return s_liveCartesianSetpoint != null ? (float[])s_liveCartesianSetpoint.Clone() : null;
+    }
+
     // InverseKinematicsSubscriber.ReceiveMessage() fires on RosSharp's websocket
     // network thread, not Unity's main thread -- same hazard SecCartInputController
     // already works around. Writing here only queues the raw payload; the actual
@@ -577,6 +595,7 @@ public class SecTrajController : MonoBehaviour
         // Stopping mid-send would otherwise leave this stuck true forever (the
         // coroutine is killed outright, so it never reaches its own reset).
         _sendingCommands = false;
+        s_liveCartesianSetpoint = null;
         if (jointPositionSubscriber != null)
         {
             jointPositionSubscriber.StopLiveTracking();
@@ -683,6 +702,7 @@ public class SecTrajController : MonoBehaviour
                     string moveCommand = $"MoveJ(JNT{localIdx},{speed:F0})";
                     ros2CommandSender.SendCommand(moveCommand);
                     Debug.Log($"[SecTrajController] ({i + 1}/{_points.Count}) {moveCommand}");
+                    s_liveCartesianSetpoint = (float[])_points[i].cart.Clone();
 
                     yield return StartCoroutine(WaitForRobotToReachJointPosition(_jointPoints[i], jointToleranceDeg, i + 1, _points.Count));
 
@@ -704,6 +724,13 @@ public class SecTrajController : MonoBehaviour
                     string splineCommand = $"SplinePTP(JNT{localIdx},{speed:F0})";
                     ros2CommandSender.SendCommand(splineCommand);
                     Debug.Log($"[SecTrajController] ({i + 1}/{_points.Count}) {splineCommand}");
+                    // Fire-and-forget mode has no arrival confirmation, so this is only an
+                    // approximation: it advances to each point as it's ENQUEUED (commandDelay
+                    // apart), not as the robot's own queue actually reaches it, so the graph's
+                    // setpoint can race ahead of the true in-progress target while this batch
+                    // is being sent. Still strictly better than the alternative (no setpoint
+                    // signal at all on real hardware -- see the field's own comment).
+                    s_liveCartesianSetpoint = (float[])_points[i].cart.Clone();
                     yield return new WaitForSeconds(commandDelay);
                 }
                 SetProgress((float)end / _points.Count);
@@ -764,8 +791,11 @@ public class SecTrajController : MonoBehaviour
         // If a newer Exec() press superseded this run while it was in the settle
         // wait above, this instance is orphaned: skip tearing down live tracking
         // (the newer run's) and don't overwrite _execCoroutine/log a completion
-        // that isn't real for the run the user is actually watching.
+        // that isn't real for the run the user is actually watching -- including
+        // NOT clearing s_liveCartesianSetpoint, which belongs to the newer run now.
         if (myGeneration != _execGeneration) yield break;
+
+        s_liveCartesianSetpoint = null;
 
         // Only stop the periodic ApplyToModel() polling here -- StopUpdating() must
         // NOT be called on this path. Nothing re-enables it except the next Exec()

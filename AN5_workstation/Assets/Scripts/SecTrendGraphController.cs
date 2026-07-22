@@ -6,6 +6,17 @@ using UnityEngine.UI;
 /// "CONTROL DE TRAYECTORIAS". Plots setpoint vs actual cartesian position
 /// (X/Y/Z, one mini-chart each) as a rolling trend line, to visualize
 /// trajectory-tracking error over time.
+///
+/// Setpoint source, in priority order (see Sample()): (1) SecTrajController's
+/// own live commanded target, while it's driving a loaded trajectory -- the
+/// real robot's fr_ros2 driver never publishes /setpoint_cartesian_position,
+/// only an5_mock_sim does, so without this the setpoint trace sat frozen at
+/// its float[6] zero default forever on real hardware (and, via UpdateChart's
+/// shared min/max scaling, squashed the actual trace flat too); (2) the ROS
+/// topic, when something (the mock, or a future real publisher) has actually
+/// sent at least one message on it; (3) the current actual position, so an
+/// idle real robot reads as "setpoint == actual" (zero error) instead of
+/// stuck at zero.
 public class SecTrendGraphController : MonoBehaviour
 {
     public CartesianPositionSubscriber actualSub;
@@ -54,11 +65,19 @@ public class SecTrendGraphController : MonoBehaviour
 
     private void Sample()
     {
-        if (actualSub == null || setpointSub == null) return;
+        if (actualSub == null) return;
 
         float[] actual = actualSub.GetLastKnownCartesianPositions();
-        float[] setpoint = setpointSub.GetLastKnownSetpoint();
-        if (actual == null || actual.Length != 6 || setpoint == null || setpoint.Length != 6) return;
+        if (actual == null || actual.Length != 6) return;
+
+        float[] setpoint = SecTrajController.GetLiveCartesianSetpoint();
+        if (setpoint == null)
+        {
+            setpoint = (setpointSub != null && setpointSub.HasReceivedSetpoint)
+                ? setpointSub.GetLastKnownSetpoint()
+                : actual;
+        }
+        if (setpoint.Length != 6) return;
 
         Push(_actualX, actual[0]); Push(_setpointX, setpoint[0]);
         Push(_actualY, actual[1]); Push(_setpointY, setpoint[1]);

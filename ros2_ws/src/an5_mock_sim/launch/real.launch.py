@@ -9,9 +9,11 @@ los mismos ejecutables/nodos que ya existian.
 Levanta:
   - fr_ros2 / ros2_cmd_server (C++): el driver real. Se conecta por TCP a
     192.168.58.2 (IP hardcodeada en fr_ros2/src/ROS_API.cpp y
-    state_feedback.cpp) y hace exit(0) si no logra conectar -- por lo tanto
-    este launch SOLO tiene sentido con el controlador real accesible en esa
-    IP/red.
+    state_feedback.cpp) y hace exit(0) si no logra conectar al arrancar.
+    Se lanza con respawn=True, asi que el launch lo reintenta cada 5 s
+    hasta que el controlador este accesible (y lo relanza si el proceso
+    muere en runtime). El driver ademas reconecta solo sus sockets TCP si
+    el controlador cierra la conexion durante la operacion.
   - rosbridge_websocket (puerto 9090), igual que en modo sim.
   - code / publisher_subscriber: igual que en modo sim.
 
@@ -44,6 +46,11 @@ def _make_ros2_cmd_server_node(context, *args, **kwargs):
         name='FR_ROS_API_node',
         output='screen',
         parameters=parameters,
+        # El driver hace exit(0) si no logra conectar al controlador al
+        # arrancar; con respawn el launch lo reintenta solo (tanto al inicio
+        # como si el proceso muere en runtime) en vez de quedar muerto.
+        respawn=True,
+        respawn_delay=5.0,
     )]
 
 
